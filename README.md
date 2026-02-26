@@ -8,13 +8,6 @@
 <div align="center">
   <h1>Framelink MCP for Figma</h1>
   <h2>THIS IS DEV FORK WITH CACHING FEATURE ADDED! USE IT UNTIL THE FEATURE WILL BE MERGED INTO UPSTREAM</h2>
-  <p>
-    🌐 Available in:
-    <a href="README.ko.md">한국어 (Korean)</a> |
-    <a href="README.ja.md">日本語 (Japanese)</a> |
-    <a href="README.zh-cn.md">简体中文 (Simplified Chinese)</a> |
-    <a href="README.zh-tw.md">繁體中文 (Traditional Chinese)</a>
-  </p>
   <h3>Give your coding agent access to your Figma data.<br/>Implement designs in any framework in one-shot.</h3>
   <a href="https://npmcharts.com/compare/figma-developer-mcp-caching-dev-fork?interval=30">
     <img alt="weekly downloads" src="https://img.shields.io/npm/dm/figma-developer-mcp-caching-dev-fork.svg">

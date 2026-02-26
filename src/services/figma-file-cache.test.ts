@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
+import { describe, it, expect, vi } from "vitest";
 import { FigmaFileCache } from "./figma-file-cache.js";
 import type { GetFileResponse } from "@figma/rest-api-spec";
 
@@ -49,7 +50,7 @@ describe("FigmaFileCache", () => {
   it("expires entries when ttl is exceeded", async () => {
     const dir = await createTempDir();
     const cache = new FigmaFileCache({ cacheDir: dir, ttlMs: 10 });
-    const dateSpy = jest.spyOn(Date, "now");
+    const dateSpy = vi.spyOn(Date, "now");
     try {
       dateSpy.mockReturnValue(1000);
       await cache.set("ABC", SAMPLE_FILE);

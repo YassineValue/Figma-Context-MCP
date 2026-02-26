@@ -1,47 +1,40 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.GLips/Figma-Context-MCP",
   "description": "Dev fork of Framelink's Figma MCP server with persistent caching until upstream merge.",
-  "status": "active",
   "repository": {
     "url": "https://github.com/stone-w4tch3r/Figma-Context-MCP",
     "source": "github"
   },
-  "version": "0.7.0",
+  "version": "0.9.0",
   "packages": [
     {
-      "registry_type": "npm",
-      "registry_base_url": "https://registry.npmjs.org",
+      "registryType": "npm",
       "identifier": "figma-developer-mcp-caching-dev-fork",
-      "version": "0.7.0",
+      "version": "0.9.0",
       "transport": {
         "type": "stdio"
       },
-      "package_arguments": [
+      "packageArguments": [
         {
           "type": "positional",
           "value": "--stdio"
         }
       ],
-      "environment_variables": [
+      "environmentVariables": [
         {
           "description": "Your Figma Personal Access Token, learn more here: https://www.figma.com/developers/api#access-tokens",
-          "is_required": true,
+          "isRequired": true,
           "format": "string",
-          "is_secret": true,
+          "isSecret": true,
           "name": "FIGMA_API_KEY"
         },
         {
           "description": "Optional JSON config enabling on-disk caching to avoid Figma rate limits, e.g. '{\"ttl\":{\"value\":30,\"unit\":\"d\"}}'.",
-          "is_required": false,
+          "isRequired": false,
           "format": "string",
-          "is_secret": false,
+          "isSecret": false,
           "name": "FIGMA_CACHING"
-        },
-        {
-          "name": "NODE_ENV",
-          "description": "Start the server in stdio mode, keep as CLI",
-          "default": "cli"
         }
       ]
     }

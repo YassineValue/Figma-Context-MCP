@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "fs/promises";
 import os from "os";
 import path from "path";
+import { describe, it, expect, vi } from "vitest";
 import type { GetFileResponse } from "@figma/rest-api-spec";
 import { FigmaService, type FigmaAuthOptions } from "./figma.js";
 
@@ -95,7 +96,7 @@ describe("FigmaService caching", () => {
   });
 });
 function spyOnRequest() {
-  return jest.spyOn(
+  return vi.spyOn(
     FigmaService.prototype as unknown as {
       request: (endpoint: string) => Promise<unknown>;
     },
