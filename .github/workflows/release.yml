@@ -50,6 +50,7 @@ jobs:
         run: pnpm publish --no-git-checks
         env:
           NODE_ENV: production
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         if: ${{ steps.release.outputs.release_created }}
 
       - name: Update server.json version
