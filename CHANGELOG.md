@@ -1,5 +1,13 @@
 # figma-developer-mcp
 
+## [0.17.1](https://github.com/stone-w4tch3r/Figma-Context-MCP/compare/v0.17.0...v0.17.1) (2026-03-11)
+
+
+### Bug Fixes
+
+* upgrade MCP SDK to 1.27.1 and modernize tool registration ([#282](https://github.com/stone-w4tch3r/Figma-Context-MCP/issues/282)) ([4153e5f](https://github.com/stone-w4tch3r/Figma-Context-MCP/commit/4153e5f857aa708ee9ee10156e553c1289f03cf7))
+* use Node 24 in release workflow for npm OIDC support ([11ba7c6](https://github.com/stone-w4tch3r/Figma-Context-MCP/commit/11ba7c6a2e22910c483592ba7cdc1966fcdc9166))
+
 ## [0.17.0](https://github.com/stone-w4tch3r/Figma-Context-MCP/compare/v0.16.0...v0.17.0) (2026-02-26)
 
 
