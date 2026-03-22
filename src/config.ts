@@ -12,6 +12,7 @@ interface ServerConfig {
   host: string;
   outputFormat: "yaml" | "json";
   skipImageDownloads?: boolean;
+  imageDir: string;
   caching?: FigmaCachingOptions;
   configSources: {
     figmaApiKey: "cli" | "env";
@@ -21,6 +22,7 @@ interface ServerConfig {
     outputFormat: "cli" | "env" | "default";
     envFile: "cli" | "default";
     skipImageDownloads?: "cli" | "env" | "default";
+    imageDir: "cli" | "env" | "default";
     caching?: "env";
   };
 }
@@ -38,6 +40,7 @@ interface CliArgs {
   host?: string;
   json?: boolean;
   "skip-image-downloads"?: boolean;
+  "image-dir"?: string;
 }
 
 type DurationUnit = "ms" | "s" | "m" | "h" | "d";
@@ -84,6 +87,11 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
         description: "Do not register the download_figma_images tool (skip image downloads)",
         default: false,
       },
+      "image-dir": {
+        type: "string",
+        description:
+          "Base directory for image downloads. The download tool will only write files within this directory. Defaults to the current working directory.",
+      },
     })
     .help()
     .version(process.env.NPM_PACKAGE_VERSION ?? "unknown")
@@ -115,6 +123,7 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
     host: "127.0.0.1",
     outputFormat: "yaml",
     skipImageDownloads: false,
+    imageDir: process.cwd(),
     caching: undefined,
     configSources: {
       figmaApiKey: "env",
@@ -124,6 +133,7 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
       outputFormat: "default",
       envFile: envFileSource,
       skipImageDownloads: "default",
+      imageDir: "default",
       caching: undefined,
     },
   };
@@ -187,6 +197,15 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
     config.configSources.skipImageDownloads = "env";
   }
 
+  // Handle IMAGE_DIR
+  if (argv["image-dir"]) {
+    config.imageDir = resolve(argv["image-dir"]);
+    config.configSources.imageDir = "cli";
+  } else if (process.env.IMAGE_DIR) {
+    config.imageDir = resolve(process.env.IMAGE_DIR);
+    config.configSources.imageDir = "env";
+  }
+
   // Handle FIGMA_CACHING
   const cachingConfig = parseCachingConfig(process.env.FIGMA_CACHING);
   if (cachingConfig) {
@@ -224,6 +243,9 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
     );
     console.log(
       `- SKIP_IMAGE_DOWNLOADS: ${config.skipImageDownloads} (source: ${config.configSources.skipImageDownloads})`,
+    );
+    console.log(
+      `- IMAGE_DIR: ${config.imageDir} (source: ${config.configSources.imageDir})`,
     );
     console.log(
       `- FIGMA_CACHING: ${config.caching ? JSON.stringify({ cacheDir: config.caching.cacheDir, ttlMs: config.caching.ttlMs }) : "disabled"}`,

@@ -1,3 +1,4 @@
+import path from "path";
 import { z } from "zod";
 import { FigmaService } from "../../services/figma.js";
 import { Logger } from "../../utils/logger.js";
@@ -45,6 +46,10 @@ const parameters = {
         .describe("Whether this image requires dimension information for CSS variables"),
       filenameSuffix: z
         .string()
+        .regex(
+          /^[a-zA-Z0-9_-]+$/,
+          "Suffix must contain only letters, numbers, underscores, or hyphens",
+        )
         .optional()
         .describe(
           "Suffix to add to filename for unique cropped images, provided in the Figma data (e.g., 'abc123')",
@@ -63,7 +68,7 @@ const parameters = {
   localPath: z
     .string()
     .describe(
-      "The absolute path to the directory where images are stored in the project. If the directory does not exist, it will be created. The format of this path should respect the directory format of the operating system you are running on. Don't use any special character escaping in the path name either.",
+      "The path to the directory where images should be saved, relative to the project root. If the directory does not exist, it will be created. Use forward slashes for path separators (e.g., 'public/images' or 'assets/icons').",
     ),
 };
 
@@ -71,9 +76,32 @@ const parametersSchema = z.object(parameters);
 export type DownloadImagesParams = z.infer<typeof parametersSchema>;
 
 // Enhanced handler function with image processing support
-async function downloadFigmaImages(params: DownloadImagesParams, figmaService: FigmaService) {
+async function downloadFigmaImages(
+  params: DownloadImagesParams,
+  figmaService: FigmaService,
+  imageDir?: string,
+) {
   try {
     const { fileKey, nodes, localPath, pngScale = 2 } = parametersSchema.parse(params);
+
+    // Resolve localPath relative to the configured image directory.
+    // path.join (not path.resolve) so a leading "/" is treated as relative, not absolute --
+    // LLMs frequently produce paths like "/public/images" when they mean "public/images".
+    const baseDir = imageDir ?? process.cwd();
+    const resolvedPath = path.resolve(path.join(baseDir, localPath));
+    // Drive roots (e.g. E:\) already end with a separator -- avoid doubling it
+    const baseDirPrefix = baseDir.endsWith(path.sep) ? baseDir : baseDir + path.sep;
+    if (resolvedPath !== baseDir && !resolvedPath.startsWith(baseDirPrefix)) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text" as const,
+            text: `Invalid path: "${localPath}" resolves outside the allowed image directory. The server's image directory is "${baseDir}". Provide a path relative to this directory (e.g., "public/images" or "assets/icons").`,
+          },
+        ],
+      };
+    }
 
     // Process nodes: collect unique downloads and track which requests they satisfy
     const downloadItems = [];
@@ -83,7 +111,7 @@ async function downloadFigmaImages(params: DownloadImagesParams, figmaService: F
     for (const rawNode of nodes) {
       const { nodeId: rawNodeId, ...node } = rawNode;
 
-      // Replace - with : in nodeId for our query—Figma API expects :
+      // Replace - with : in nodeId for our query -- Figma API expects :
       const nodeId = rawNodeId?.replace(/-/g, ":");
 
       // Apply filename suffix if provided
@@ -132,7 +160,7 @@ async function downloadFigmaImages(params: DownloadImagesParams, figmaService: F
       }
     }
 
-    const allDownloads = await figmaService.downloadImages(fileKey, localPath, downloadItems, {
+    const allDownloads = await figmaService.downloadImages(fileKey, resolvedPath, downloadItems, {
       pngScale,
     });
 
@@ -182,11 +210,15 @@ async function downloadFigmaImages(params: DownloadImagesParams, figmaService: F
   }
 }
 
+function getDescription(imageDir?: string) {
+  const baseDir = imageDir ?? process.cwd();
+  return `Download SVG and PNG images used in a Figma file based on the IDs of image or icon nodes. Images will be saved relative to the server's image directory: ${baseDir}`;
+}
+
 // Export tool configuration
 export const downloadFigmaImagesTool = {
   name: "download_figma_images",
-  description:
-    "Download SVG and PNG images used in a Figma file based on the IDs of image or icon nodes",
+  getDescription,
   parametersSchema,
   handler: downloadFigmaImages,
 } as const;
