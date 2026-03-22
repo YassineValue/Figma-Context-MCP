@@ -4,7 +4,7 @@ node_modules
 package-lock.json
 
 # Build output
-dist
+# dist — committed so npx github: installs work without a build step
 
 # Environment variables
 .env
