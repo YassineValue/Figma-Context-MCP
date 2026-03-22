@@ -163,10 +163,20 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
     config.port = argv.port;
     config.configSources.port = "cli";
   } else if (process.env.FRAMELINK_PORT) {
-    config.port = parseInt(process.env.FRAMELINK_PORT, 10);
+    const parsed = parseInt(process.env.FRAMELINK_PORT, 10);
+    if (isNaN(parsed)) {
+      console.error(`Invalid FRAMELINK_PORT "${process.env.FRAMELINK_PORT}". Must be a number.`);
+      process.exit(1);
+    }
+    config.port = parsed;
     config.configSources.port = "env";
   } else if (process.env.PORT) {
-    config.port = parseInt(process.env.PORT, 10);
+    const parsed = parseInt(process.env.PORT, 10);
+    if (isNaN(parsed)) {
+      console.error(`Invalid PORT "${process.env.PORT}". Must be a number.`);
+      process.exit(1);
+    }
+    config.port = parsed;
     config.configSources.port = "env";
   }
 
@@ -184,7 +194,12 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
     config.outputFormat = "json";
     config.configSources.outputFormat = "cli";
   } else if (process.env.OUTPUT_FORMAT) {
-    config.outputFormat = process.env.OUTPUT_FORMAT as "yaml" | "json";
+    const fmt = process.env.OUTPUT_FORMAT;
+    if (fmt !== "yaml" && fmt !== "json") {
+      console.error(`Invalid OUTPUT_FORMAT "${fmt}". Must be "yaml" or "json".`);
+      process.exit(1);
+    }
+    config.outputFormat = fmt;
     config.configSources.outputFormat = "env";
   }
 

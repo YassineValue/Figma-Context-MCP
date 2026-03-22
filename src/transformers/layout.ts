@@ -243,7 +243,10 @@ function buildSimplifiedLayoutValues(
         dimensions.height = n.absoluteBoundingBox.height;
 
       if (n.preserveRatio) {
-        dimensions.aspectRatio = n.absoluteBoundingBox?.width / n.absoluteBoundingBox?.height;
+        const h = n.absoluteBoundingBox?.height;
+        if (h && h > 0) {
+          dimensions.aspectRatio = n.absoluteBoundingBox?.width / h;
+        }
       }
     } else {
       // Node is not an AutoLayout. Include dimensions if the node is not growing (which it should never be)

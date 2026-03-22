@@ -127,6 +127,10 @@ export async function startHttpServer(
         `Setting up progress notifications for token ${progressToken} on session ${sessionId}`,
       );
       progressInterval = setInterval(async () => {
+        if (!sessions[sessionId]) {
+          clearInterval(progressInterval!);
+          return;
+        }
         Logger.log("Sending progress notification", progress);
         await sessions[sessionId].server.server.notification({
           method: "notifications/progress",

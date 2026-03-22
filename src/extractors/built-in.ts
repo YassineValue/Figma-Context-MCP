@@ -152,7 +152,7 @@ export const componentExtractor: ExtractorFn = (node, result, _context) => {
       result.componentProperties = Object.entries(node.componentProperties ?? {}).map(
         ([name, { value, type }]) => ({
           name,
-          value: value.toString(),
+          value: String(value),
           type,
         }),
       );

@@ -290,12 +290,12 @@ export function parsePaint(raw: Paint, hasChildren: boolean = false): Simplified
       imageDownloadArguments: finalProcessing,
     };
   } else if (raw.type === "SOLID") {
-    // treat as SOLID
-    const { hex, opacity } = convertColor(raw.color!, raw.opacity);
+    if (!raw.color) return "#000000" as CSSHexColor;
+    const { hex, opacity } = convertColor(raw.color, raw.opacity);
     if (opacity === 1) {
       return hex;
     } else {
-      return formatRGBAColor(raw.color!, opacity);
+      return formatRGBAColor(raw.color, opacity);
     }
   } else if (raw.type === "PATTERN") {
     return parsePatternPaint(raw);

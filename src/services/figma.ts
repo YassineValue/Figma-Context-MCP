@@ -44,6 +44,11 @@ export class FigmaService {
     this.apiKey = figmaApiKey || "";
     this.oauthToken = figmaOAuthToken || "";
     this.useOAuth = !!useOAuth && !!this.oauthToken;
+    if (!this.apiKey && !this.oauthToken) {
+      throw new Error(
+        "FigmaService requires authentication: provide either a Figma API key (FIGMA_API_KEY) or an OAuth token (FIGMA_OAUTH_TOKEN).",
+      );
+    }
     if (cachingOptions) {
       this.fileCache = new FigmaFileCache(cachingOptions);
     }
@@ -129,7 +134,8 @@ export class FigmaService {
 
     if (format === "png") {
       const scale = options.pngScale || 2;
-      const endpoint = `/images/${fileKey}?ids=${nodeIds.join(",")}&format=png&scale=${scale}`;
+      const encodedIds = nodeIds.map(encodeURIComponent).join(",");
+      const endpoint = `/images/${fileKey}?ids=${encodedIds}&format=png&scale=${scale}`;
       const response = await this.request<GetImagesResponse>(endpoint);
       return this.filterValidImages(response.images);
     } else {
@@ -321,7 +327,7 @@ export class FigmaService {
       return { data: nodeResponse, cacheInfo: cacheResult.cacheInfo };
     }
 
-    const endpoint = `/files/${fileKey}/nodes?ids=${nodeId}${depth ? `&depth=${depth}` : ""}`;
+    const endpoint = `/files/${fileKey}/nodes?ids=${encodeURIComponent(nodeId)}${typeof depth === "number" ? `&depth=${depth}` : ""}`;
     Logger.log(
       `Retrieving raw Figma node: ${nodeId} from ${fileKey} (depth: ${depth ?? "default"})`,
     );
@@ -363,7 +369,7 @@ export class FigmaService {
   }
 
   private async fetchFileFromApi(fileKey: string, depth?: number | null): Promise<GetFileResponse> {
-    const endpoint = `/files/${fileKey}${depth ? `?depth=${depth}` : ""}`;
+    const endpoint = `/files/${fileKey}${typeof depth === "number" ? `?depth=${depth}` : ""}`;
     Logger.log(
       `Retrieving raw Figma file: ${fileKey} (depth: ${depth ?? (this.fileCache ? "full" : "default")})`,
     );
