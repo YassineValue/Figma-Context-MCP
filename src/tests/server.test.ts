@@ -12,12 +12,13 @@ const dummyAuth: FigmaAuthOptions = {
   useOAuth: false,
 };
 
+const createTestServer = () => createServer(dummyAuth, { isHTTP: true });
+
 describe("StreamableHTTP transport", () => {
   let port: number;
 
   beforeAll(async () => {
-    const mcpServer = createServer(dummyAuth, { isHTTP: true });
-    const httpServer = await startHttpServer("127.0.0.1", 0, mcpServer);
+    const httpServer = await startHttpServer("127.0.0.1", 0, createTestServer);
     port = (httpServer.address() as AddressInfo).port;
   }, 15_000);
 
@@ -50,8 +51,7 @@ describe("SSE transport", () => {
   let port: number;
 
   beforeAll(async () => {
-    const mcpServer = createServer(dummyAuth, { isHTTP: true });
-    const httpServer = await startHttpServer("127.0.0.1", 0, mcpServer);
+    const httpServer = await startHttpServer("127.0.0.1", 0, createTestServer);
     port = (httpServer.address() as AddressInfo).port;
   }, 15_000);
 
@@ -82,8 +82,7 @@ describe("Negative protocol tests", () => {
   let port: number;
 
   beforeAll(async () => {
-    const mcpServer = createServer(dummyAuth, { isHTTP: true });
-    const httpServer = await startHttpServer("127.0.0.1", 0, mcpServer);
+    const httpServer = await startHttpServer("127.0.0.1", 0, createTestServer);
     port = (httpServer.address() as AddressInfo).port;
   }, 15_000);
 
@@ -142,8 +141,7 @@ describe("Multi-client test", () => {
   let port: number;
 
   beforeAll(async () => {
-    const mcpServer = createServer(dummyAuth, { isHTTP: true });
-    const httpServer = await startHttpServer("127.0.0.1", 0, mcpServer);
+    const httpServer = await startHttpServer("127.0.0.1", 0, createTestServer);
     port = (httpServer.address() as AddressInfo).port;
   }, 15_000);
 
@@ -155,11 +153,8 @@ describe("Multi-client test", () => {
     }
   });
 
-  // Known issue: a single McpServer instance can only serve one transport at a
-  // time — SDK 1.21+ throws on double-connect instead of silently replacing
-  // the active transport. The error is caught in server.ts but the second
-  // client never gets a working connection.
-  it.fails(
+  // Per-session McpServer instances allow concurrent clients (upstream #299)
+  it(
     "StreamableHTTP and SSE clients work concurrently",
     async () => {
       const streamableClient = new Client({ name: "test-streamable", version: "1.0.0" });
@@ -195,8 +190,7 @@ describe("Multi-client test", () => {
 
 describe("Server lifecycle", () => {
   it("starts and listens on assigned port", async () => {
-    const mcpServer = createServer(dummyAuth, { isHTTP: true });
-    const httpServer = await startHttpServer("127.0.0.1", 0, mcpServer);
+    const httpServer = await startHttpServer("127.0.0.1", 0, createTestServer);
     const port = (httpServer.address() as AddressInfo).port;
 
     expect(port).toBeGreaterThan(0);
@@ -205,8 +199,7 @@ describe("Server lifecycle", () => {
   }, 15_000);
 
   it("stopHttpServer shuts down cleanly without hanging", async () => {
-    const mcpServer = createServer(dummyAuth, { isHTTP: true });
-    await startHttpServer("127.0.0.1", 0, mcpServer);
+    await startHttpServer("127.0.0.1", 0, createTestServer);
 
     // Race stopHttpServer against a deadline
     const timeout = new Promise<"timeout">((resolve) =>
