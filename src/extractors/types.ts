@@ -19,6 +19,12 @@ export type StyleTypes =
 
 export type GlobalVars = {
   styles: Record<string, StyleTypes>;
+  /**
+   * Reverse lookup from JSON-serialized style value to its variable ID.
+   * Enables O(1) dedup in findOrCreateVar instead of scanning all entries.
+   * Excluded from serialized output -- it's a build-time optimization only.
+   */
+  _styleIndex?: Map<string, string>;
 };
 
 export interface TraversalContext {

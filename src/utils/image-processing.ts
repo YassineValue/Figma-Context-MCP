@@ -76,7 +76,6 @@ export type ImageProcessingResult = {
   wasCropped: boolean;
   cropRegion?: { left: number; top: number; width: number; height: number };
   cssVariables?: string;
-  processingLog: string[];
 };
 
 /**
@@ -98,8 +97,6 @@ export async function downloadAndProcessImage(
   requiresImageDimensions: boolean = false,
 ): Promise<ImageProcessingResult> {
   const { Logger } = await import("./logger.js");
-  const processingLog: string[] = [];
-
   // First download the original image
   const { downloadFigmaImage } = await import("./common.js");
   const originalPath = await downloadFigmaImage(fileName, localPath, imageUrl);
@@ -113,7 +110,6 @@ export async function downloadAndProcessImage(
       originalDimensions: { width: 0, height: 0 },
       finalDimensions: { width: 0, height: 0 },
       wasCropped: false,
-      processingLog,
     };
   }
 
@@ -173,7 +169,6 @@ export async function downloadAndProcessImage(
     wasCropped,
     cropRegion,
     cssVariables,
-    processingLog,
   };
 }
 

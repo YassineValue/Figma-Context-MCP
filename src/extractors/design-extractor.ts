@@ -32,7 +32,7 @@ export function simplifyRawFigmaObject(
     globalVars,
   );
 
-  // Return complete design
+  // Return complete design (exclude _styleIndex -- it's a build-time optimization)
   return {
     ...metadata,
     nodes: extractedNodes,

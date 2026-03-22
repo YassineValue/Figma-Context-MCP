@@ -19,22 +19,24 @@ import { generateVarId } from "~/utils/common.js";
 import type { Node as FigmaDocumentNode } from "@figma/rest-api-spec";
 
 /**
- * Helper function to find or create a global variable.
+ * Find an existing global variable with the same value, or create a new one.
+ * Uses a reverse-lookup Map (_styleIndex) for O(1) dedup instead of
+ * scanning all entries with JSON.stringify on every call.
  */
 function findOrCreateVar(globalVars: GlobalVars, value: StyleTypes, prefix: string): string {
-  // Check if the same value already exists
-  const [existingVarId] =
-    Object.entries(globalVars.styles).find(
-      ([_, existingValue]) => JSON.stringify(existingValue) === JSON.stringify(value),
-    ) ?? [];
-
-  if (existingVarId) {
-    return existingVarId;
+  if (!globalVars._styleIndex) {
+    globalVars._styleIndex = new Map();
   }
 
-  // Create a new variable if it doesn't exist
+  const serialized = JSON.stringify(value);
+  const existing = globalVars._styleIndex.get(serialized);
+  if (existing) {
+    return existing;
+  }
+
   const varId = generateVarId(prefix);
   globalVars.styles[varId] = value;
+  globalVars._styleIndex.set(serialized, varId);
   return varId;
 }
 

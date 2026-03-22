@@ -86,49 +86,6 @@ export async function downloadFigmaImage(
 }
 
 /**
- * Remove keys with empty arrays or empty objects from an object.
- * @param input - The input object or value.
- * @returns The processed object or the original value.
- */
-export function removeEmptyKeys<T>(input: T): T {
-  // If not an object type or null, return directly
-  if (typeof input !== "object" || input === null) {
-    return input;
-  }
-
-  // Handle array type
-  if (Array.isArray(input)) {
-    return input.map((item) => removeEmptyKeys(item)) as T;
-  }
-
-  // Handle object type
-  const result = {} as T;
-  for (const key in input) {
-    if (Object.prototype.hasOwnProperty.call(input, key)) {
-      const value = input[key];
-
-      // Recursively process nested objects
-      const cleanedValue = removeEmptyKeys(value);
-
-      // Skip empty arrays and empty objects
-      if (
-        cleanedValue !== undefined &&
-        !(Array.isArray(cleanedValue) && cleanedValue.length === 0) &&
-        !(
-          typeof cleanedValue === "object" &&
-          cleanedValue !== null &&
-          Object.keys(cleanedValue).length === 0
-        )
-      ) {
-        result[key] = cleanedValue;
-      }
-    }
-  }
-
-  return result;
-}
-
-/**
  * Generate a 6-character random variable ID
  * @param prefix - ID prefix
  * @returns A 6-character random ID string with prefix
