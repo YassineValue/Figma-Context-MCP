@@ -1,4 +1,4 @@
-import fs from "fs";
+import { access, constants, mkdir, writeFile } from "fs/promises";
 
 /**
  * Simple metrics counters for observability.
@@ -37,26 +37,27 @@ export const Logger = {
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
+/**
+ * Write debug data to a log file. Only runs in development mode.
+ * Uses async fs to avoid blocking the event loop on large Figma files.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- writes arbitrary debug data
 export function writeLogs(name: string, value: any): void {
   if (process.env.NODE_ENV !== "development") return;
 
-  try {
-    const logsDir = "logs";
-    const logPath = `${logsDir}/${name}`;
+  const logsDir = "logs";
+  const logPath = `${logsDir}/${name}`;
 
-    // Check if we can write to the current directory
-    fs.accessSync(process.cwd(), fs.constants.W_OK);
-
-    // Create logs directory if it doesn't exist
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir, { recursive: true });
+  // Fire-and-forget -- callers don't await this
+  void (async () => {
+    try {
+      await access(process.cwd(), constants.W_OK);
+      await mkdir(logsDir, { recursive: true });
+      await writeFile(logPath, JSON.stringify(value, null, 2));
+      Logger.log(`Debug log written to: ${logPath}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      Logger.log(`Failed to write logs to ${name}: ${errorMessage}`);
     }
-
-    fs.writeFileSync(logPath, JSON.stringify(value, null, 2));
-    Logger.log(`Debug log written to: ${logPath}`);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    Logger.log(`Failed to write logs to ${name}: ${errorMessage}`);
-  }
+  })();
 }

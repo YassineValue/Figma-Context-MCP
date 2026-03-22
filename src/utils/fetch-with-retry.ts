@@ -102,7 +102,11 @@ export async function fetchWithRetry<T extends { status?: number }>(
     } catch (curlError: unknown) {
       const curlMessage = curlError instanceof Error ? curlError.message : String(curlError);
       Logger.error(`[fetchWithRetry] Curl fallback also failed for ${url}: ${curlMessage}`);
-      throw fetchError;
+      // Throw combined error so callers see both failure reasons
+      const fetchMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+      throw new Error(
+        `Figma API request failed. fetch: ${fetchMessage} | curl fallback: ${curlMessage}`,
+      );
     }
   }
 }

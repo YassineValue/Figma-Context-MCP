@@ -335,7 +335,7 @@ function parsePatternPaint(
    * They also have hexagonal horizontal and vertical repeats, but
    * those aren't easy to pull off in CSS, so we just use repeat.
    */
-  let backgroundRepeat = "repeat";
+  const backgroundRepeat = "repeat";
 
   let horizontal = "left";
   switch (raw.horizontalAlignment) {
