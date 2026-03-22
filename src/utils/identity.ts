@@ -4,8 +4,10 @@ import type {
   StrokeWeights,
   HasFramePropertiesTrait,
 } from "@figma/rest-api-spec";
-import { isTruthy } from "remeda";
-export { isTruthy };
+/** Type guard that narrows out null and undefined */
+export function isTruthy<T>(val: T): val is NonNullable<T> {
+  return val != null;
+}
 
 export function hasValue<K extends PropertyKey, T>(
   key: K,
