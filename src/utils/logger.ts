@@ -23,13 +23,13 @@ export const Metrics = {
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- logging accepts arbitrary values */
 export const Logger = {
-  isHTTP: false,
+  /**
+   * All logging goes to stderr. This is critical for stdio transport —
+   * stdout is reserved for JSON-RPC messages. Even in HTTP mode, stderr
+   * is the correct destination for operational logs.
+   */
   log: (...args: any[]) => {
-    if (Logger.isHTTP) {
-      console.log("[INFO]", ...args);
-    } else {
-      console.error("[INFO]", ...args);
-    }
+    console.error("[INFO]", ...args);
   },
   error: (...args: any[]) => {
     console.error("[ERROR]", ...args);

@@ -1,6 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { FigmaService, type FigmaAuthOptions } from "../services/figma.js";
-import { Logger } from "../utils/logger.js";
 import {
   downloadFigmaImagesTool,
   getFigmaDataTool,
@@ -17,7 +16,6 @@ const serverInfo = {
 };
 
 type CreateServerOptions = {
-  isHTTP?: boolean;
   outputFormat?: "yaml" | "json";
   skipImageDownloads?: boolean;
   imageDir?: string;
@@ -27,7 +25,6 @@ type CreateServerOptions = {
 function createServer(
   authOptions: FigmaAuthOptions,
   {
-    isHTTP = false,
     outputFormat = "yaml",
     skipImageDownloads = false,
     imageDir,
@@ -37,8 +34,6 @@ function createServer(
   const server = new McpServer(serverInfo);
   const figmaService = new FigmaService(authOptions, caching);
   registerTools(server, figmaService, { outputFormat, skipImageDownloads, imageDir });
-
-  Logger.isHTTP = isHTTP;
 
   return server;
 }

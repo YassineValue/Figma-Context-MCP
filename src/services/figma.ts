@@ -57,11 +57,10 @@ export class FigmaService {
   }
 
   private getAuthHeaders(): Record<string, string> {
+    // Auth headers are never logged — tokens must stay out of stderr
     if (this.useOAuth) {
-      Logger.log("Using OAuth Bearer token for authentication");
       return { Authorization: `Bearer ${this.oauthToken}` };
     } else {
-      Logger.log("Using Personal Access Token for authentication");
       return { "X-Figma-Token": this.apiKey };
     }
   }

@@ -12,7 +12,7 @@ const dummyAuth: FigmaAuthOptions = {
   useOAuth: false,
 };
 
-const createTestServer = () => createServer(dummyAuth, { isHTTP: true });
+const createTestServer = () => createServer(dummyAuth);
 
 describe("StreamableHTTP transport", () => {
   let port: number;

@@ -17,17 +17,27 @@ type RequestOptions = RequestInit & {
  * Format a helpful error message for Figma API HTTP errors.
  * Rate limits (429) and server errors (529) are common and get specific guidance.
  */
-function formatHttpError(status: number, statusText: string, url: string): string {
+function formatHttpError(
+  status: number,
+  statusText: string,
+  url: string,
+  headers?: Headers,
+): string {
+  const retryAfter = headers?.get("Retry-After");
+  const rateLimitType = headers?.get("X-Figma-Rate-Limit-Type");
+  const retryInfo = retryAfter ? ` Retry-After: ${retryAfter}s.` : "";
+  const limitInfo = rateLimitType ? ` Rate limit type: ${rateLimitType}.` : "";
+
   if (status === 429) {
     return (
-      `Figma API rate limit (429) hit for ${url}. ` +
-      "Figma applies rate limits per-token; wait 30-60s before retrying. " +
+      `Figma API rate limit (429) hit for ${url}.${retryInfo}${limitInfo} ` +
+      "Figma applies rate limits per-token; wait before retrying. " +
       "If this happens frequently, consider caching (FIGMA_CACHING env var) or using a higher-tier Figma plan."
     );
   }
   if (status === 529) {
     return (
-      `Figma API overloaded (529) for ${url}. ` +
+      `Figma API overloaded (529) for ${url}.${retryInfo} ` +
       "This is a temporary Figma-side issue. Wait 60-120s and retry."
     );
   }
@@ -49,15 +59,21 @@ function formatHttpError(status: number, statusText: string, url: string): strin
  * Not a true retry -- if fetch() fails (common behind corporate proxies that
  * block Node's native TLS), falls back to curl which respects system proxy config.
  */
+const FETCH_TIMEOUT_MS = 30_000;
+
 export async function fetchWithRetry<T extends { status?: number }>(
   url: string,
   options: RequestOptions = {},
 ): Promise<T> {
   try {
-    const response = await fetch(url, options);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const response = await fetch(url, { ...options, signal: controller.signal }).finally(() =>
+      clearTimeout(timeout),
+    );
 
     if (!response.ok) {
-      throw new Error(formatHttpError(response.status, response.statusText, url));
+      throw new Error(formatHttpError(response.status, response.statusText, url, response.headers));
     }
     return (await response.json()) as T;
   } catch (fetchError: unknown) {
@@ -68,7 +84,7 @@ export async function fetchWithRetry<T extends { status?: number }>(
 
     const curlHeaders = formatHeadersForCurl(options.headers);
     // -s: Silent mode, -S: Show errors, --fail-with-body: error on HTTP failures, -L: Follow redirects
-    const curlArgs = ["-s", "-S", "--fail-with-body", "-L", ...curlHeaders, url];
+    const curlArgs = ["-s", "-S", "--fail-with-body", "-L", "--max-time", "30", ...curlHeaders, url];
 
     try {
       Logger.log(`[fetchWithRetry] Executing curl with args: ${JSON.stringify(curlArgs)}`);

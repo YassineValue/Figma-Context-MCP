@@ -28,9 +28,12 @@ const parameters = {
     ),
   depth: z
     .number()
+    .int()
+    .min(0)
+    .max(10)
     .optional()
     .describe(
-      "OPTIONAL. Do NOT use unless explicitly requested by the user. Controls how many levels deep to traverse the node tree.",
+      "OPTIONAL. Do NOT use unless explicitly requested by the user. Controls how many levels deep to traverse the node tree. Max 10.",
     ),
 };
 

@@ -32,7 +32,6 @@ export async function startServer(): Promise<void> {
   const config = getServerConfig(isStdioMode);
 
   const serverOptions = {
-    isHTTP: !isStdioMode,
     outputFormat: config.outputFormat as "yaml" | "json",
     skipImageDownloads: config.skipImageDownloads,
     imageDir: config.imageDir,
@@ -45,15 +44,18 @@ export async function startServer(): Promise<void> {
     await server.connect(transport);
   } else {
     const createMcpServer = () => createServer(config.auth, serverOptions);
-    console.log(`Initializing Figma MCP Server in HTTP mode on ${config.host}:${config.port}...`);
+    console.error(`Initializing Figma MCP Server in HTTP mode on ${config.host}:${config.port}...`);
     await startHttpServer(config.host, config.port, createMcpServer);
 
-    process.on("SIGINT", async () => {
-      Logger.log("Shutting down server...");
+    const gracefulShutdown = async (signal: string) => {
+      Logger.log(`Received ${signal}, shutting down...`);
       await stopHttpServer();
       Logger.log("Server shutdown complete");
       process.exit(0);
-    });
+    };
+
+    process.on("SIGINT", () => void gracefulShutdown("SIGINT"));
+    process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
   }
 }
 
@@ -67,6 +69,32 @@ export async function startHttpServer(
   }
 
   const app = express();
+
+  // Track last activity per session for idle reaping
+  const sessionLastActivity = new Map<string, number>();
+  const SESSION_MAX_IDLE_MS = 10 * 60 * 1000;
+
+  // Session activity middleware — update timestamp on every request with a session ID
+  app.use((req, _res, next) => {
+    const sid = req.headers["mcp-session-id"] as string | undefined;
+    if (sid) sessionLastActivity.set(sid, Date.now());
+    next();
+  });
+
+  // Session reaper: every 5 minutes, remove sessions inactive for >10 minutes
+  const reaperInterval = setInterval(() => {
+    const now = Date.now();
+    for (const id of Object.keys(sessions)) {
+      const lastActive = sessionLastActivity.get(id) ?? 0;
+      if (now - lastActive > SESSION_MAX_IDLE_MS) {
+        Logger.log(`Reaping idle session ${id}`);
+        try { void sessions[id].transport.close(); } catch { /* ignore */ }
+        delete sessions[id];
+        sessionLastActivity.delete(id);
+      }
+    }
+  }, 5 * 60 * 1000);
+  reaperInterval.unref(); // Don't keep process alive just for the reaper
 
   // Health check endpoint for monitoring
   app.get("/health", (_req, res) => {
@@ -160,13 +188,13 @@ export async function startHttpServer(
       return;
     }
 
-    console.log(`Received session request for session ${sessionId}`);
+    Logger.log(`Received session request for session ${sessionId}`);
 
     try {
       const transport = sessions[sessionId].transport as StreamableHTTPServerTransport;
       await transport.handleRequest(req, res);
     } catch (error) {
-      console.error("Error handling session request:", error);
+      Logger.error("Error handling session request:", error);
       if (!res.headersSent) {
         res.status(500).send("Error processing session request");
       }
@@ -229,7 +257,7 @@ export async function stopHttpServer(): Promise<void> {
       await sessions[sessionId].transport.close();
       delete sessions[sessionId];
     } catch (error) {
-      console.error(`Error closing session ${sessionId}:`, error);
+      Logger.error(`Error closing session ${sessionId}:`, error);
     }
   }
 

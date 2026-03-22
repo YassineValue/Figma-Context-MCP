@@ -216,9 +216,9 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
 
   // Log configuration in HTTP mode
   if (!isStdioMode) {
-    console.log("\nConfiguration:");
-    for (const line of logLines) console.log(line);
-    console.log();
+    console.error("\nConfiguration:");
+    for (const line of logLines) console.error(line);
+    console.error();
   }
 
   return { auth, port, host, outputFormat, skipImageDownloads, imageDir, caching };
