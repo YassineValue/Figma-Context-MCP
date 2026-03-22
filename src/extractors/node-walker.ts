@@ -42,6 +42,7 @@ export function extractFromDesign(
 
 /**
  * Process a single node with all provided extractors in one pass.
+ * Callers are responsible for pre-filtering with shouldProcessNode.
  */
 function processNodeWithExtractors(
   node: FigmaDocumentNode,
@@ -49,10 +50,6 @@ function processNodeWithExtractors(
   context: TraversalContext,
   options: TraversalOptions,
 ): SimplifiedNode | null {
-  if (!shouldProcessNode(node, options)) {
-    return null;
-  }
-
   // Always include base metadata
   const result: SimplifiedNode = {
     id: node.id,
@@ -65,30 +62,27 @@ function processNodeWithExtractors(
     extractor(node, result, context);
   }
 
-  // Handle children recursively
-  if (shouldTraverseChildren(node, context, options)) {
+  // Handle children recursively (depth check inlined from shouldTraverseChildren)
+  const withinDepth = options.maxDepth === undefined || context.currentDepth < options.maxDepth;
+  if (withinDepth && hasValue("children", node) && node.children.length > 0) {
     const childContext: TraversalContext = {
       ...context,
       currentDepth: context.currentDepth + 1,
       parent: node,
     };
 
-    // Use the same pattern as the existing parseNode function
-    if (hasValue("children", node) && node.children.length > 0) {
-      const children = node.children
-        .filter((child) => shouldProcessNode(child, options))
-        .map((child) => processNodeWithExtractors(child, extractors, childContext, options))
-        .filter((child): child is SimplifiedNode => child !== null);
+    const children = node.children
+      .filter((child) => shouldProcessNode(child, options))
+      .map((child) => processNodeWithExtractors(child, extractors, childContext, options))
+      .filter((child): child is SimplifiedNode => child !== null);
 
-      if (children.length > 0) {
-        // Allow custom logic to modify parent and control which children to include
-        const childrenToInclude = options.afterChildren
-          ? options.afterChildren(node, result, children)
-          : children;
+    if (children.length > 0) {
+      const childrenToInclude = options.afterChildren
+        ? options.afterChildren(node, result, children)
+        : children;
 
-        if (childrenToInclude.length > 0) {
-          result.children = childrenToInclude;
-        }
+      if (childrenToInclude.length > 0) {
+        result.children = childrenToInclude;
       }
     }
   }
@@ -100,29 +94,11 @@ function processNodeWithExtractors(
  * Determine if a node should be processed based on filters.
  */
 function shouldProcessNode(node: FigmaDocumentNode, options: TraversalOptions): boolean {
-  // Skip invisible nodes
   if (!isVisible(node)) {
     return false;
   }
 
-  // Apply custom node filter if provided
   if (options.nodeFilter && !options.nodeFilter(node)) {
-    return false;
-  }
-
-  return true;
-}
-
-/**
- * Determine if we should traverse into a node's children.
- */
-function shouldTraverseChildren(
-  node: FigmaDocumentNode,
-  context: TraversalContext,
-  options: TraversalOptions,
-): boolean {
-  // Check depth limit
-  if (options.maxDepth !== undefined && context.currentDepth >= options.maxDepth) {
     return false;
   }
 

@@ -4,8 +4,6 @@ import path from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 
-export type StyleId = `${string}_${string}` & { __brand: "StyleId" };
-
 /**
  * Download a Figma image and save it locally using stream piping.
  * @returns Full file path where the image was saved
@@ -52,7 +50,7 @@ export async function downloadFigmaImage(
  * @param prefix - ID prefix
  * @returns A 6-character random ID string with prefix
  */
-export function generateVarId(prefix: string = "var"): StyleId {
+export function generateVarId(prefix: string = "var"): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let result = "";
 
@@ -61,7 +59,7 @@ export function generateVarId(prefix: string = "var"): StyleId {
     result += chars[randomIndex];
   }
 
-  return `${prefix}_${result}` as StyleId;
+  return `${prefix}_${result}`;
 }
 
 /**

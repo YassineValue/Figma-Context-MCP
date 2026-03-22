@@ -14,17 +14,6 @@ interface ServerConfig {
   skipImageDownloads?: boolean;
   imageDir: string;
   caching?: FigmaCachingOptions;
-  configSources: {
-    figmaApiKey: "cli" | "env";
-    figmaOAuthToken: "cli" | "env" | "none";
-    port: "cli" | "env" | "default";
-    host: "cli" | "env" | "default";
-    outputFormat: "cli" | "env" | "default";
-    envFile: "cli" | "default";
-    skipImageDownloads?: "cli" | "env" | "default";
-    imageDir: "cli" | "env" | "default";
-    caching?: "env";
-  };
 }
 
 function maskApiKey(key: string): string {
@@ -98,137 +87,126 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
     .parseSync() as CliArgs;
 
   // Load environment variables ASAP from custom path or default
-  let envFilePath: string;
-  let envFileSource: "cli" | "default";
-
-  if (argv["env"]) {
-    envFilePath = resolve(argv["env"]);
-    envFileSource = "cli";
-  } else {
-    envFilePath = resolve(process.cwd(), ".env");
-    envFileSource = "default";
-  }
-
-  // Override anything auto-loaded from .env if a custom file is provided.
+  const envFilePath = argv["env"] ? resolve(argv["env"]) : resolve(process.cwd(), ".env");
   loadEnv({ path: envFilePath, override: true });
 
-  const auth: FigmaAuthOptions = {
-    figmaApiKey: "",
-    figmaOAuthToken: "",
-    useOAuth: false,
-  };
+  // Build log lines inline (replaces the old configSources tracking)
+  const logLines: string[] = [];
+  const logSrc = (name: string, value: string, source: string) =>
+    logLines.push(`- ${name}: ${value} (source: ${source})`);
 
-  const config: Omit<ServerConfig, "auth"> = {
-    port: 3333,
-    host: "127.0.0.1",
-    outputFormat: "yaml",
-    skipImageDownloads: false,
-    imageDir: process.cwd(),
-    caching: undefined,
-    configSources: {
-      figmaApiKey: "env",
-      figmaOAuthToken: "none",
-      port: "default",
-      host: "default",
-      outputFormat: "default",
-      envFile: envFileSource,
-      skipImageDownloads: "default",
-      imageDir: "default",
-      caching: undefined,
-    },
-  };
+  logSrc("ENV_FILE", envFilePath, argv["env"] ? "cli" : "default");
 
-  // Handle FIGMA_API_KEY
+  // Auth
+  const auth: FigmaAuthOptions = { figmaApiKey: "", figmaOAuthToken: "", useOAuth: false };
+
   if (argv["figma-api-key"]) {
     auth.figmaApiKey = argv["figma-api-key"];
-    config.configSources.figmaApiKey = "cli";
   } else if (process.env.FIGMA_API_KEY) {
     auth.figmaApiKey = process.env.FIGMA_API_KEY;
-    config.configSources.figmaApiKey = "env";
   }
 
-  // Handle FIGMA_OAUTH_TOKEN
   if (argv["figma-oauth-token"]) {
     auth.figmaOAuthToken = argv["figma-oauth-token"];
-    config.configSources.figmaOAuthToken = "cli";
     auth.useOAuth = true;
   } else if (process.env.FIGMA_OAUTH_TOKEN) {
     auth.figmaOAuthToken = process.env.FIGMA_OAUTH_TOKEN;
-    config.configSources.figmaOAuthToken = "env";
     auth.useOAuth = true;
   }
 
-  // Handle PORT (FRAMELINK_PORT takes precedence, PORT is fallback for backwards compatibility)
+  if (auth.useOAuth) {
+    logSrc("FIGMA_OAUTH_TOKEN", maskApiKey(auth.figmaOAuthToken), argv["figma-oauth-token"] ? "cli" : "env");
+    logLines.push("- Authentication Method: OAuth Bearer Token");
+  } else {
+    logSrc("FIGMA_API_KEY", maskApiKey(auth.figmaApiKey), argv["figma-api-key"] ? "cli" : "env");
+    logLines.push("- Authentication Method: Personal Access Token (X-Figma-Token)");
+  }
+
+  // Port
+  let port = 3333;
+  let portSource = "default";
   if (argv.port) {
-    config.port = argv.port;
-    config.configSources.port = "cli";
+    port = argv.port;
+    portSource = "cli";
   } else if (process.env.FRAMELINK_PORT) {
     const parsed = parseInt(process.env.FRAMELINK_PORT, 10);
     if (isNaN(parsed)) {
       console.error(`Invalid FRAMELINK_PORT "${process.env.FRAMELINK_PORT}". Must be a number.`);
       process.exit(1);
     }
-    config.port = parsed;
-    config.configSources.port = "env";
+    port = parsed;
+    portSource = "env";
   } else if (process.env.PORT) {
     const parsed = parseInt(process.env.PORT, 10);
     if (isNaN(parsed)) {
       console.error(`Invalid PORT "${process.env.PORT}". Must be a number.`);
       process.exit(1);
     }
-    config.port = parsed;
-    config.configSources.port = "env";
+    port = parsed;
+    portSource = "env";
   }
+  logSrc("FRAMELINK_PORT", String(port), portSource);
 
-  // Handle HOST
+  // Host
+  let host = "127.0.0.1";
+  let hostSource = "default";
   if (argv.host) {
-    config.host = argv.host;
-    config.configSources.host = "cli";
+    host = argv.host;
+    hostSource = "cli";
   } else if (process.env.FRAMELINK_HOST) {
-    config.host = process.env.FRAMELINK_HOST;
-    config.configSources.host = "env";
+    host = process.env.FRAMELINK_HOST;
+    hostSource = "env";
   }
+  logSrc("FRAMELINK_HOST", host, hostSource);
 
-  // Handle JSON output format
+  // Output format
+  let outputFormat: "yaml" | "json" = "yaml";
+  let outputSource = "default";
   if (argv.json) {
-    config.outputFormat = "json";
-    config.configSources.outputFormat = "cli";
+    outputFormat = "json";
+    outputSource = "cli";
   } else if (process.env.OUTPUT_FORMAT) {
     const fmt = process.env.OUTPUT_FORMAT;
     if (fmt !== "yaml" && fmt !== "json") {
       console.error(`Invalid OUTPUT_FORMAT "${fmt}". Must be "yaml" or "json".`);
       process.exit(1);
     }
-    config.outputFormat = fmt;
-    config.configSources.outputFormat = "env";
+    outputFormat = fmt;
+    outputSource = "env";
   }
+  logSrc("OUTPUT_FORMAT", outputFormat, outputSource);
 
-  // Handle skipImageDownloads
+  // Skip image downloads
+  let skipImageDownloads = false;
+  let skipSource = "default";
   if (argv["skip-image-downloads"]) {
-    config.skipImageDownloads = true;
-    config.configSources.skipImageDownloads = "cli";
+    skipImageDownloads = true;
+    skipSource = "cli";
   } else if (process.env.SKIP_IMAGE_DOWNLOADS === "true") {
-    config.skipImageDownloads = true;
-    config.configSources.skipImageDownloads = "env";
+    skipImageDownloads = true;
+    skipSource = "env";
   }
+  logSrc("SKIP_IMAGE_DOWNLOADS", String(skipImageDownloads), skipSource);
 
-  // Handle IMAGE_DIR
+  // Image directory
+  let imageDir = process.cwd();
+  let imageDirSource = "default";
   if (argv["image-dir"]) {
-    config.imageDir = resolve(argv["image-dir"]);
-    config.configSources.imageDir = "cli";
+    imageDir = resolve(argv["image-dir"]);
+    imageDirSource = "cli";
   } else if (process.env.IMAGE_DIR) {
-    config.imageDir = resolve(process.env.IMAGE_DIR);
-    config.configSources.imageDir = "env";
+    imageDir = resolve(process.env.IMAGE_DIR);
+    imageDirSource = "env";
   }
+  logSrc("IMAGE_DIR", imageDir, imageDirSource);
 
-  // Handle FIGMA_CACHING
-  const cachingConfig = parseCachingConfig(process.env.FIGMA_CACHING);
-  if (cachingConfig) {
-    config.caching = cachingConfig;
-    config.configSources.caching = "env";
-  }
+  // Caching
+  const caching = parseCachingConfig(process.env.FIGMA_CACHING);
+  logLines.push(
+    `- FIGMA_CACHING: ${caching ? JSON.stringify({ cacheDir: caching.cacheDir, ttlMs: caching.ttlMs }) : "disabled"}`,
+  );
 
-  // Validate configuration
+  // Validate auth
   if (!auth.figmaApiKey && !auth.figmaOAuthToken) {
     console.error(
       "Either FIGMA_API_KEY or FIGMA_OAUTH_TOKEN is required (via CLI argument or .env file)",
@@ -236,42 +214,14 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
     process.exit(1);
   }
 
-  // Log configuration sources
+  // Log configuration in HTTP mode
   if (!isStdioMode) {
     console.log("\nConfiguration:");
-    console.log(`- ENV_FILE: ${envFilePath} (source: ${config.configSources.envFile})`);
-    if (auth.useOAuth) {
-      console.log(
-        `- FIGMA_OAUTH_TOKEN: ${maskApiKey(auth.figmaOAuthToken)} (source: ${config.configSources.figmaOAuthToken})`,
-      );
-      console.log("- Authentication Method: OAuth Bearer Token");
-    } else {
-      console.log(
-        `- FIGMA_API_KEY: ${maskApiKey(auth.figmaApiKey)} (source: ${config.configSources.figmaApiKey})`,
-      );
-      console.log("- Authentication Method: Personal Access Token (X-Figma-Token)");
-    }
-    console.log(`- FRAMELINK_PORT: ${config.port} (source: ${config.configSources.port})`);
-    console.log(`- FRAMELINK_HOST: ${config.host} (source: ${config.configSources.host})`);
-    console.log(
-      `- OUTPUT_FORMAT: ${config.outputFormat} (source: ${config.configSources.outputFormat})`,
-    );
-    console.log(
-      `- SKIP_IMAGE_DOWNLOADS: ${config.skipImageDownloads} (source: ${config.configSources.skipImageDownloads})`,
-    );
-    console.log(
-      `- IMAGE_DIR: ${config.imageDir} (source: ${config.configSources.imageDir})`,
-    );
-    console.log(
-      `- FIGMA_CACHING: ${config.caching ? JSON.stringify({ cacheDir: config.caching.cacheDir, ttlMs: config.caching.ttlMs }) : "disabled"}`,
-    );
-    console.log(); // Empty line for better readability
+    for (const line of logLines) console.log(line);
+    console.log();
   }
 
-  return {
-    ...config,
-    auth,
-  };
+  return { auth, port, host, outputFormat, skipImageDownloads, imageDir, caching };
 }
 
 function parseCachingConfig(rawValue: string | undefined): FigmaCachingOptions | undefined {

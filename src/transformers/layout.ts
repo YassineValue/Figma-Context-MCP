@@ -118,27 +118,18 @@ function convertSizing(
   return undefined;
 }
 
+const DIRECTION_MAP: Record<string, "horizontal" | "vertical"> = {
+  "primary|row": "horizontal",
+  "primary|column": "vertical",
+  "counter|row": "vertical",
+  "counter|column": "horizontal",
+};
+
 function getDirection(
   axis: "primary" | "counter",
   mode: "row" | "column",
 ): "horizontal" | "vertical" {
-  switch (axis) {
-    case "primary":
-      switch (mode) {
-        case "row":
-          return "horizontal";
-        case "column":
-          return "vertical";
-      }
-      break;
-    case "counter":
-      switch (mode) {
-        case "row":
-          return "vertical";
-        case "column":
-          return "horizontal";
-      }
-  }
+  return DIRECTION_MAP[`${axis}|${mode}`];
 }
 
 function buildSimplifiedFrameValues(n: FigmaDocumentNode): SimplifiedLayout | { mode: "none" } {

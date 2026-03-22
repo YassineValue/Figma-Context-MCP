@@ -193,9 +193,6 @@ export class FigmaService {
   ): Promise<ImageProcessingResult[]> {
     if (items.length === 0) return [];
 
-    // Path validation is handled by the download tool before calling this method.
-    // localPath is already resolved and verified against the configured image directory.
-    const resolvedPath = localPath;
     const { pngScale = 2, svgOptions } = options;
     const downloadPromises: Promise<ImageProcessingResult[]>[] = [];
 
@@ -207,91 +204,50 @@ export class FigmaService {
       (item): item is typeof item & { nodeId: string } => !!item.nodeId,
     );
 
-    // Download image fills with processing
-    if (imageFills.length > 0) {
-      const fillUrls = await this.getImageFillUrls(fileKey);
-      const fillDownloads = imageFills
-        .map(({ imageRef, fileName, needsCropping, cropTransform, requiresImageDimensions }) => {
-          const imageUrl = fillUrls[imageRef];
+    // Helper: match items to their download URLs and create processing promises
+    const downloadBatch = (
+      batchItems: typeof items,
+      urlMap: Record<string, string>,
+      keyFn: (item: (typeof items)[number]) => string | undefined,
+    ) => {
+      const downloads = batchItems
+        .map((item) => {
+          const imageUrl = urlMap[keyFn(item) ?? ""];
           return imageUrl
             ? downloadAndProcessImage(
-                fileName,
-                resolvedPath,
+                item.fileName,
+                localPath,
                 imageUrl,
-                needsCropping,
-                cropTransform,
-                requiresImageDimensions,
+                item.needsCropping,
+                item.cropTransform,
+                item.requiresImageDimensions,
               )
             : null;
         })
-        .filter((promise): promise is Promise<ImageProcessingResult> => promise !== null);
+        .filter((p): p is Promise<ImageProcessingResult> => p !== null);
 
-      if (fillDownloads.length > 0) {
-        downloadPromises.push(Promise.all(fillDownloads));
+      if (downloads.length > 0) {
+        downloadPromises.push(Promise.all(downloads));
       }
+    };
+
+    if (imageFills.length > 0) {
+      const fillUrls = await this.getImageFillUrls(fileKey);
+      downloadBatch(imageFills, fillUrls, (i) => i.imageRef);
     }
 
-    // Download rendered nodes with processing
     if (renderNodes.length > 0) {
-      const pngNodes = renderNodes.filter((node) => !node.fileName.toLowerCase().endsWith(".svg"));
-      const svgNodes = renderNodes.filter((node) => node.fileName.toLowerCase().endsWith(".svg"));
+      const pngNodes = renderNodes.filter((n) => !n.fileName.toLowerCase().endsWith(".svg"));
+      const svgNodes = renderNodes.filter((n) => n.fileName.toLowerCase().endsWith(".svg"));
 
-      // Download PNG renders
       if (pngNodes.length > 0) {
-        const pngUrls = await this.getNodeRenderUrls(
-          fileKey,
-          pngNodes.map((n) => n.nodeId),
-          "png",
-          { pngScale },
-        );
-        const pngDownloads = pngNodes
-          .map(({ nodeId, fileName, needsCropping, cropTransform, requiresImageDimensions }) => {
-            const imageUrl = pngUrls[nodeId];
-            return imageUrl
-              ? downloadAndProcessImage(
-                  fileName,
-                  resolvedPath,
-                  imageUrl,
-                  needsCropping,
-                  cropTransform,
-                  requiresImageDimensions,
-                )
-              : null;
-          })
-          .filter((promise): promise is Promise<ImageProcessingResult> => promise !== null);
-
-        if (pngDownloads.length > 0) {
-          downloadPromises.push(Promise.all(pngDownloads));
-        }
+        const pngUrls = await this.getNodeRenderUrls(fileKey, pngNodes.map((n) => n.nodeId), "png", { pngScale });
+        downloadBatch(pngNodes, pngUrls, (i) => i.nodeId);
       }
 
-      // Download SVG renders
       if (svgNodes.length > 0) {
-        const svgUrls = await this.getNodeRenderUrls(
-          fileKey,
-          svgNodes.map((n) => n.nodeId),
-          "svg",
-          { svgOptions },
-        );
-        const svgDownloads = svgNodes
-          .map(({ nodeId, fileName, needsCropping, cropTransform, requiresImageDimensions }) => {
-            const imageUrl = svgUrls[nodeId];
-            return imageUrl
-              ? downloadAndProcessImage(
-                  fileName,
-                  resolvedPath,
-                  imageUrl,
-                  needsCropping,
-                  cropTransform,
-                  requiresImageDimensions,
-                )
-              : null;
-          })
-          .filter((promise): promise is Promise<ImageProcessingResult> => promise !== null);
-
-        if (svgDownloads.length > 0) {
-          downloadPromises.push(Promise.all(svgDownloads));
-        }
+        const svgUrls = await this.getNodeRenderUrls(fileKey, svgNodes.map((n) => n.nodeId), "svg", { svgOptions });
+        downloadBatch(svgNodes, svgUrls, (i) => i.nodeId);
       }
     }
 
