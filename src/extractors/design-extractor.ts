@@ -41,15 +41,15 @@ export function simplifyRawFigmaObject(
 
   // Inline variables that are only referenced once to reduce output size.
   // Shared variables (referenced 2+) stay in globalVars for deduplication.
-  const styles = inlineSingleUseVars(extractedNodes, finalGlobalVars.styles);
+  const styles = inlineSingleUseVars(extractedNodes, finalGlobalVars.styles, finalGlobalVars._refCounts);
 
-  return {
+  return stripEmpty({
     ...metadata,
     nodes: extractedNodes,
     components: simplifyComponents(components),
     componentSets: simplifyComponentSets(componentSets),
     globalVars: { styles },
-  };
+  }) as SimplifiedDesign;
 }
 
 // Style-referencing fields on SimplifiedNode that hold a globalVars key
@@ -60,38 +60,47 @@ const STYLE_REF_FIELDS = ["layout", "textStyle", "fills", "strokes", "effects"] 
  * This reduces output size by ~20-40% on typical Figma files by eliminating
  * indirection for styles that aren't actually shared.
  *
+ * Uses pre-computed ref counts from findOrCreateVar (populated during extraction)
+ * to identify single-use vars in O(1) per var, then makes a single tree pass
+ * to inline them.
+ *
  * Mutates nodes in-place for efficiency (they're freshly created by extractors).
  * Returns the pruned styles map (only shared vars remain).
  */
 function inlineSingleUseVars(
   nodes: SimplifiedNode[],
   styles: Record<string, StyleTypes>,
+  refCounts?: Map<string, number>,
 ): Record<string, StyleTypes> {
-  // Count how many times each variable ID is referenced across all nodes
-  const refCounts = new Map<string, number>();
-  visitNodes(nodes, (node) => {
-    for (const field of STYLE_REF_FIELDS) {
-      const varId = node[field];
-      if (typeof varId === "string" && varId in styles) {
-        refCounts.set(varId, (refCounts.get(varId) ?? 0) + 1);
-      }
-    }
-  });
-
-  // Collect single-use var IDs
+  // Build single-use set from pre-computed ref counts
   const singleUse = new Set<string>();
-  for (const [varId, count] of refCounts) {
-    if (count === 1) singleUse.add(varId);
+  if (refCounts) {
+    for (const [varId, count] of refCounts) {
+      if (count === 1 && varId in styles) singleUse.add(varId);
+    }
+  } else {
+    // Fallback: count refs by scanning the tree (for callers without ref counts)
+    const counts = new Map<string, number>();
+    visitNodes(nodes, (node) => {
+      for (const field of STYLE_REF_FIELDS) {
+        const varId = node[field];
+        if (typeof varId === "string" && varId in styles) {
+          counts.set(varId, (counts.get(varId) ?? 0) + 1);
+        }
+      }
+    });
+    for (const [varId, count] of counts) {
+      if (count === 1) singleUse.add(varId);
+    }
   }
 
   if (singleUse.size === 0) return styles;
 
-  // Replace var references with inline values on nodes
+  // Single pass: replace var references with inline values on nodes
   visitNodes(nodes, (node) => {
     for (const field of STYLE_REF_FIELDS) {
       const varId = node[field];
       if (typeof varId === "string" && singleUse.has(varId)) {
-        // Store the inlined value directly on the node
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic field assignment
         (node as any)[field] = styles[varId];
       }
@@ -116,6 +125,32 @@ function visitNodes(nodes: SimplifiedNode[], fn: (node: SimplifiedNode) => void)
       visitNodes(node.children, fn);
     }
   }
+}
+
+/**
+ * Recursively strip null, undefined, empty arrays, and empty objects from a value.
+ * Reduces serialized output size by ~5-10%.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- operates on arbitrary JSON-like structures
+function stripEmpty(value: any): any {
+  if (value === null || value === undefined) return undefined;
+  if (Array.isArray(value)) {
+    const cleaned = value.map(stripEmpty).filter((v) => v !== undefined);
+    return cleaned.length > 0 ? cleaned : undefined;
+  }
+  if (typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    let hasKeys = false;
+    for (const [k, v] of Object.entries(value)) {
+      const cleaned = stripEmpty(v);
+      if (cleaned !== undefined) {
+        result[k] = cleaned;
+        hasKeys = true;
+      }
+    }
+    return hasKeys ? result : undefined;
+  }
+  return value;
 }
 
 /**

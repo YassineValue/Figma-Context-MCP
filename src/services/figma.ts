@@ -36,6 +36,8 @@ export class FigmaService {
   private readonly useOAuth: boolean;
   private readonly baseUrl = "https://api.figma.com/v1";
   private readonly fileCache?: FigmaFileCache;
+  /** Dedup map: if a Figma API request is already in-flight, reuse its promise */
+  private readonly inflight = new Map<string, Promise<unknown>>();
 
   constructor(
     { figmaApiKey, figmaOAuthToken, useOAuth }: FigmaAuthOptions,
@@ -78,20 +80,34 @@ export class FigmaService {
   }
 
   private async request<T>(endpoint: string): Promise<T> {
-    try {
-      Metrics.apiCalls++;
-      Logger.log(`Calling ${this.baseUrl}${endpoint}`);
-      const headers = this.getAuthHeaders();
-
-      return await fetchWithRetry<T & { status?: number }>(`${this.baseUrl}${endpoint}`, {
-        headers,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Failed to make request to Figma API endpoint '${endpoint}': ${errorMessage}`,
-      );
+    // Deduplicate concurrent requests for the same endpoint
+    const existing = this.inflight.get(endpoint);
+    if (existing) {
+      Logger.log(`Deduplicating in-flight request for ${endpoint}`);
+      return existing as Promise<T>;
     }
+
+    const promise = (async () => {
+      try {
+        Metrics.apiCalls++;
+        Logger.log(`Calling ${this.baseUrl}${endpoint}`);
+        const headers = this.getAuthHeaders();
+
+        return await fetchWithRetry<T & { status?: number }>(`${this.baseUrl}${endpoint}`, {
+          headers,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Failed to make request to Figma API endpoint '${endpoint}': ${errorMessage}`,
+        );
+      } finally {
+        this.inflight.delete(endpoint);
+      }
+    })();
+
+    this.inflight.set(endpoint, promise);
+    return promise;
   }
 
   /**
@@ -298,11 +314,8 @@ export class FigmaService {
       response = cacheResult.data;
       cacheInfo = cacheResult.cacheInfo;
 
-      if (typeof depth === "number") {
-        const truncated = cloneFileResponseWithDepth(response, depth);
-        writeLogs("figma-raw.json", truncated);
-        return { data: truncated, cacheInfo };
-      }
+      // Depth-limiting is handled by the extractor's maxDepth option,
+      // so we pass the full cached response through without cloning.
       writeLogs("figma-raw.json", response);
       return { data: response, cacheInfo };
     }
@@ -376,17 +389,6 @@ export class FigmaService {
 
     return this.request<GetFileResponse>(endpoint);
   }
-}
-
-function cloneFileResponseWithDepth(file: GetFileResponse, depth: number): GetFileResponse {
-  if (depth === undefined || depth === null) {
-    return file;
-  }
-
-  return {
-    ...file,
-    document: cloneNode(file.document, depth) as DocumentNode,
-  };
 }
 
 function cloneNode<T extends FigmaNode>(node: T, depth?: number): T {

@@ -19,6 +19,28 @@ import { generateVarId } from "~/utils/common.js";
 import type { Node as FigmaDocumentNode } from "@figma/rest-api-spec";
 
 /**
+ * Fast hash key for dedup. For flat objects with only scalar values (strings,
+ * numbers, booleans, undefined), concatenate key=value pairs pipe-delimited —
+ * much cheaper than JSON.stringify. Falls back to JSON.stringify for anything
+ * containing nested objects/arrays (gradients, image fills).
+ */
+function hashStyleValue(value: StyleTypes): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return JSON.stringify(value);
+  if (typeof value !== "object" || value === null) return JSON.stringify(value);
+
+  const entries = Object.entries(value);
+  for (const [, v] of entries) {
+    if (v !== null && v !== undefined && typeof v === "object") {
+      return JSON.stringify(value);
+    }
+  }
+  // Flat object — build a cheap key from sorted entries
+  entries.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  return entries.map(([k, v]) => `${k}=${v}`).join("|");
+}
+
+/**
  * Find an existing global variable with the same value, or create a new one.
  * Uses a reverse-lookup Map (_styleIndex) for O(1) dedup instead of
  * scanning all entries with JSON.stringify on every call.
@@ -28,15 +50,21 @@ function findOrCreateVar(globalVars: GlobalVars, value: StyleTypes, prefix: stri
     globalVars._styleIndex = new Map();
   }
 
-  const serialized = JSON.stringify(value);
-  const existing = globalVars._styleIndex.get(serialized);
+  if (!globalVars._refCounts) {
+    globalVars._refCounts = new Map();
+  }
+
+  const key = hashStyleValue(value);
+  const existing = globalVars._styleIndex.get(key);
   if (existing) {
+    globalVars._refCounts.set(existing, (globalVars._refCounts.get(existing) ?? 1) + 1);
     return existing;
   }
 
   const varId = generateVarId(prefix);
   globalVars.styles[varId] = value;
-  globalVars._styleIndex.set(serialized, varId);
+  globalVars._styleIndex.set(key, varId);
+  globalVars._refCounts.set(varId, 1);
   return varId;
 }
 

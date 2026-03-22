@@ -1,4 +1,4 @@
-import { access, constants, mkdir, readFile, rename, unlink, writeFile } from "fs/promises";
+import { access, constants, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 import type { GetFileResponse } from "@figma/rest-api-spec";
 import { Logger, Metrics } from "~/utils/logger.js";
@@ -7,6 +7,8 @@ export type FigmaCachingOptions = {
   cacheDir: string;
   ttlMs: number;
 };
+
+const MAX_CACHE_ENTRIES = 20;
 
 type StoredFilePayload = {
   fetchedAt: number;
@@ -107,15 +109,48 @@ export class FigmaFileCache {
 
     try {
       // Write to temporary file first, then atomically rename to avoid corruption
-      await writeFile(tempPath, JSON.stringify(payload, null, 2));
+      await writeFile(tempPath, JSON.stringify(payload));
       await rename(tempPath, cachePath);
       Logger.log(`[FigmaFileCache] Cached file ${fileKey}`);
+      // Evict oldest entries if cache exceeds max size
+      await this.evictOldest();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       Logger.log(`[FigmaFileCache] Failed to write cache for ${fileKey}: ${message}`);
       // Clean up temp file on error
       await this.safeDelete(tempPath);
       throw new Error(`Figma cache write failed: ${message}`);
+    }
+  }
+
+  /**
+   * LRU eviction: if cache has more than MAX_CACHE_ENTRIES files,
+   * delete the oldest (by mtime) until we're back within limits.
+   */
+  private async evictOldest(): Promise<void> {
+    try {
+      const files = await readdir(this.options.cacheDir);
+      const jsonFiles = files.filter((f) => f.endsWith(".json") && !f.endsWith(".tmp"));
+      if (jsonFiles.length <= MAX_CACHE_ENTRIES) return;
+
+      // Get mtime for each file and sort oldest-first
+      const withStats = await Promise.all(
+        jsonFiles.map(async (f) => {
+          const fp = path.join(this.options.cacheDir, f);
+          const s = await stat(fp);
+          return { path: fp, mtime: s.mtimeMs };
+        }),
+      );
+      withStats.sort((a, b) => a.mtime - b.mtime);
+
+      const toDelete = withStats.slice(0, withStats.length - MAX_CACHE_ENTRIES);
+      for (const entry of toDelete) {
+        Logger.log(`[FigmaFileCache] Evicting oldest cache entry: ${path.basename(entry.path)}`);
+        await this.safeDelete(entry.path);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      Logger.log(`[FigmaFileCache] Cache eviction failed: ${message}`);
     }
   }
 
