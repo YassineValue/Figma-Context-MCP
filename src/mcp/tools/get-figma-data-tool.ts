@@ -120,6 +120,17 @@ async function getFigmaData(
       formattedResult = `${cacheNotice}\n\n${formattedResult}`;
     }
 
+    // Warn if the response is likely too large for an LLM context window.
+    // ~4 chars per token is a rough estimate for YAML/JSON text.
+    const estimatedTokens = Math.ceil(formattedResult.length / 4);
+    if (estimatedTokens > 80_000) {
+      const sizeWarning =
+        `\n\nWarning: This response is approximately ${Math.round(estimatedTokens / 1000)}k tokens. ` +
+        `If this exceeds your context window, re-request with a specific nodeId or lower depth to reduce size.`;
+      formattedResult += sizeWarning;
+      Logger.log(`Large response warning: ~${estimatedTokens} estimated tokens`);
+    }
+
     Logger.log("Sending result to client");
     return {
       content: [{ type: "text" as const, text: formattedResult }],

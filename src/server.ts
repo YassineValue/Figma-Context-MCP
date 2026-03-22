@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { Server } from "http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Logger } from "./utils/logger.js";
+import { Logger, Metrics } from "./utils/logger.js";
 import { createServer } from "./mcp/index.js";
 import { getServerConfig } from "./config.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -59,6 +59,19 @@ export async function startHttpServer(
   }
 
   const app = express();
+
+  // Health check endpoint for monitoring
+  app.get("/health", (_req, res) => {
+    res.json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      metrics: Metrics.summary(),
+      transport: {
+        streamableSessions: Object.keys(transports.streamable).length,
+        sseSessions: Object.keys(transports.sse).length,
+      },
+    });
+  });
 
   // Parse JSON requests for the Streamable HTTP endpoint only, will break SSE endpoint
   app.use("/mcp", express.json());

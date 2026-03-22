@@ -13,6 +13,42 @@ type RequestOptions = RequestInit & {
   headers?: Record<string, string>;
 };
 
+/**
+ * Format a helpful error message for Figma API HTTP errors.
+ * Rate limits (429) and server errors (529) are common and get specific guidance.
+ */
+function formatHttpError(status: number, statusText: string, url: string): string {
+  if (status === 429) {
+    return (
+      `Figma API rate limit (429) hit for ${url}. ` +
+      "Figma applies rate limits per-token; wait 30-60s before retrying. " +
+      "If this happens frequently, consider caching (FIGMA_CACHING env var) or using a higher-tier Figma plan."
+    );
+  }
+  if (status === 529) {
+    return (
+      `Figma API overloaded (529) for ${url}. ` +
+      "This is a temporary Figma-side issue. Wait 60-120s and retry."
+    );
+  }
+  if (status === 403) {
+    return (
+      `Figma API access denied (403) for ${url}. ` +
+      "Check that your API key or OAuth token has access to this file."
+    );
+  }
+  if (status === 404) {
+    return `Figma resource not found (404) for ${url}. Check that the file key and node IDs are correct.`;
+  }
+  return `Fetch failed with status ${status}: ${statusText}`;
+}
+
+/**
+ * Fetch a URL with automatic curl fallback for corporate proxy environments.
+ *
+ * Not a true retry -- if fetch() fails (common behind corporate proxies that
+ * block Node's native TLS), falls back to curl which respects system proxy config.
+ */
 export async function fetchWithRetry<T extends { status?: number }>(
   url: string,
   options: RequestOptions = {},
@@ -21,7 +57,7 @@ export async function fetchWithRetry<T extends { status?: number }>(
     const response = await fetch(url, options);
 
     if (!response.ok) {
-      throw new Error(`Fetch failed with status ${response.status}: ${response.statusText}`);
+      throw new Error(formatHttpError(response.status, response.statusText, url));
     }
     return (await response.json()) as T;
   } catch (fetchError: unknown) {
@@ -31,21 +67,14 @@ export async function fetchWithRetry<T extends { status?: number }>(
     );
 
     const curlHeaders = formatHeadersForCurl(options.headers);
-    // Most options here are to ensure stderr only contains errors, so we can use it to confidently check if an error occurred.
-    // -s: Silent mode—no progress bar in stderr
-    // -S: Show errors in stderr
-    // --fail-with-body: curl errors with code 22, and outputs body of failed request, e.g. "Fetch failed with status 404"
-    // -L: Follow redirects
+    // -s: Silent mode, -S: Show errors, --fail-with-body: error on HTTP failures, -L: Follow redirects
     const curlArgs = ["-s", "-S", "--fail-with-body", "-L", ...curlHeaders, url];
 
     try {
-      // Fallback to curl for  corporate networks that have proxies that sometimes block fetch
       Logger.log(`[fetchWithRetry] Executing curl with args: ${JSON.stringify(curlArgs)}`);
       const { stdout, stderr } = await execFileAsync("curl", curlArgs);
 
       if (stderr) {
-        // curl often outputs progress to stderr, so only treat as error if stdout is empty
-        // or if stderr contains typical error keywords.
         if (
           !stdout ||
           stderr.toLowerCase().includes("error") ||
@@ -64,19 +93,15 @@ export async function fetchWithRetry<T extends { status?: number }>(
 
       const result = JSON.parse(stdout) as T;
 
-      // Successful Figma requests don't have a status property, and some endpoints return 200 with an
-      // error status in the body, e.g. https://www.figma.com/developers/api#get-images-endpoint
+      // Some Figma endpoints return 200 with an error status in the JSON body
       if (result.status && result.status !== 200) {
-        throw new Error(`Curl command failed: ${result}`);
+        throw new Error(formatHttpError(result.status, "API error in response body", url));
       }
 
       return result;
     } catch (curlError: unknown) {
       const curlMessage = curlError instanceof Error ? curlError.message : String(curlError);
       Logger.error(`[fetchWithRetry] Curl fallback also failed for ${url}: ${curlMessage}`);
-      // Re-throw the original fetch error to give context about the initial failure
-      // or throw a new error that wraps both, depending on desired error reporting.
-      // For now, re-throwing the original as per the user example's spirit.
       throw fetchError;
     }
   }
@@ -84,8 +109,6 @@ export async function fetchWithRetry<T extends { status?: number }>(
 
 /**
  * Converts HeadersInit to an array of curl header arguments for execFile.
- * @param headers Headers to convert.
- * @returns Array of strings for curl arguments: ["-H", "key: value", "-H", "key2: value2"]
  */
 function formatHeadersForCurl(headers: Record<string, string> | undefined): string[] {
   if (!headers) {

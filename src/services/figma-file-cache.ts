@@ -1,7 +1,7 @@
 import { access, constants, mkdir, readFile, rename, unlink, writeFile } from "fs/promises";
 import path from "path";
 import type { GetFileResponse } from "@figma/rest-api-spec";
-import { Logger } from "~/utils/logger.js";
+import { Logger, Metrics } from "~/utils/logger.js";
 
 export type FigmaCachingOptions = {
   cacheDir: string;
@@ -71,11 +71,13 @@ export class FigmaFileCache {
       }
 
       if (this.isExpired(payload.fetchedAt)) {
+        Metrics.cacheMisses++;
         Logger.log(`[FigmaFileCache] Cache expired for ${fileKey}`);
         await this.safeDelete(cachePath);
         return null;
       }
 
+      Metrics.cacheHits++;
       Logger.log(`[FigmaFileCache] Cache hit for ${fileKey}`);
       return {
         data: payload.data,
@@ -83,6 +85,7 @@ export class FigmaFileCache {
         ttlMs: this.options.ttlMs,
       };
     } catch (error: unknown) {
+      Metrics.cacheMisses++;
       const err = error as { code?: string; message?: string };
       if (err?.code !== "ENOENT") {
         const message = err?.message ?? String(error);

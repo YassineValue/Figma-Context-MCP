@@ -8,7 +8,7 @@ import type {
   Transform,
 } from "@figma/rest-api-spec";
 import { downloadAndProcessImage, type ImageProcessingResult } from "~/utils/image-processing.js";
-import { Logger, writeLogs } from "~/utils/logger.js";
+import { Logger, Metrics, writeLogs } from "~/utils/logger.js";
 import { fetchWithRetry } from "~/utils/fetch-with-retry.js";
 import { FigmaFileCache, type FigmaCachingOptions } from "./figma-file-cache.js";
 
@@ -74,6 +74,7 @@ export class FigmaService {
 
   private async request<T>(endpoint: string): Promise<T> {
     try {
+      Metrics.apiCalls++;
       Logger.log(`Calling ${this.baseUrl}${endpoint}`);
       const headers = this.getAuthHeaders();
 

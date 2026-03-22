@@ -3,3 +3,4 @@ export { createServer } from "./mcp/index.js";
 export type { FigmaService } from "./services/figma.js";
 export { getServerConfig } from "./config.js";
 export { startServer, startHttpServer, stopHttpServer } from "./server.js";
+export { Metrics } from "./utils/logger.js";

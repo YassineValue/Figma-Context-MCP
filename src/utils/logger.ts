@@ -1,5 +1,26 @@
 import fs from "fs";
 
+/**
+ * Simple metrics counters for observability.
+ * Tracks cache performance and API call volume without external dependencies.
+ */
+export const Metrics = {
+  cacheHits: 0,
+  cacheMisses: 0,
+  apiCalls: 0,
+  /** Reset all counters (useful for testing) */
+  reset() {
+    this.cacheHits = 0;
+    this.cacheMisses = 0;
+    this.apiCalls = 0;
+  },
+  summary() {
+    const total = this.cacheHits + this.cacheMisses;
+    const hitRate = total > 0 ? Math.round((this.cacheHits / total) * 100) : 0;
+    return `cache: ${this.cacheHits}/${total} hits (${hitRate}%), api calls: ${this.apiCalls}`;
+  },
+};
+
 /* eslint-disable @typescript-eslint/no-explicit-any -- logging accepts arbitrary values */
 export const Logger = {
   isHTTP: false,
